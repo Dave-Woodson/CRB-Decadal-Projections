@@ -1,0 +1,486 @@
+
+```{r}
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#   Midterm Projection (Years 1-5) using CESM-DPLE precip, temp with KNN block bootstraping of observed flows  #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# Version 1.1        
+# 18 June 2020 
+# 
+# ~~~~ Updates ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+# Functionalized redundant code
+# Weighted Euclidean distance calculation with correlation between covariate and flow
+# Using ensemble mean for each LE covariate, instead of quantiles
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+#### Author: David Woodson
+
+#### CLEAR MEMORY
+rm(list=ls())
+
+# #packages
+# library(dplyr)
+# #library(tidyr)
+# library(lubridate)
+# library(ggplot2)
+# library(data.table)
+# library(ggrepel)
+# library(RColorBrewer)
+# library(readxl)
+# library(hydroGOF)
+# library(kknn)
+# library(plyr)
+# library(qpcR)
+# library(easyVerification)
+# library(verification)
+# library(reshape)
+# library(stringr)
+# library(ggpubr)
+# library(randomForest)
+# library(tidytext)
+# library(DescTools)
+# library(viridis)
+# library(scatterplot3d)
+
+#### SOURCE LIBRARIES (suppress package loading messages) AND SET WORKING DIRECTORY
+mainDir="K:/My Drive/Phd Research/CRB Midterm Temperature Perturbed Predictions/Code/Phase 1/years1-10"
+
+setwd(mainDir)
+# suppressPackageStartupMessages(source("Lib_HW1_orig.R"))
+# source("Lib_HW1_orig.R")
+# suppressPackageStartupMessages(source("Lib_HW2.R"))
+# source("Lib_HW2.R")
+
+
+#### Clear the R console
+cat("\f")
+
+lib = "K:/My Drive/Phd Research/CRB Midterm Temperature Perturbed Predictions/Code/Phase 1/midTerm_forecasts/midTermForecast_Library_v1.4.R"
+
+suppressPackageStartupMessages(source(lib))
+source(lib)
+
+```
+
+```{r}
+# meanLengths = c(3,5,7)
+meanLengths = 2:10
+n = length(meanLengths)
+fcsts = vector("list", n)
+
+meanLength = 3
+fcstMode = 'kFold'
+
+for(i in meanLengths){
+  
+  cat("\n")
+  cat(paste0("Mean length: ", i, "years"))
+  cat("\n")
+  
+  fcsts[[i]] = midTermProjection(meanLength = i, fcstMode = 'kFold')
+  
+  cat("\n")
+  cat("~~~~~~~~~~~~~~~~~~~~ Finished, start next mean length ~~~~~~~~~~~~~~~~~~~~")
+  cat("\n")
+  
+}
+
+```
+
+
+```{r}
+
+fcstSkillScores = NULL
+fcstReliability = NULL
+fcstReliabilityScores = NULL
+fcstReliabilityTraditional = NULL
+fcstRankHist = NULL
+
+for(i in meanLengths){N
+  
+  cat("\n")
+  cat(paste0("Mean length: ", i, "years"))
+  cat("\n")
+  
+  #skill scores
+  fcsts[[i]][[2]]$meanLength = i
+  fcstSkillScores = bind_rows(fcstSkillScores, fcsts[[i]][[2]])
+  
+  #reliability plot data (probabilities)
+  fcstReliability = bind_rows(fcstReliability, fcsts[[i]][[5]])
+  
+  #reliability scores
+  fcstReliabilityScores = bind_rows(fcstReliabilityScores, fcsts[[i]][[6]])
+  
+  #reliability scores traditional
+  fcsts[[i]][[7]]$meanLength = i
+  fcstReliabilityTraditional = bind_rows(fcstReliabilityTraditional, fcsts[[i]][[7]])
+  
+  #rank hist data
+  fcsts[[i]][[8]]$meanLength = i
+  fcstRankHist = bind_rows(fcstRankHist, fcsts[[i]][[8]])
+
+  cat("\n")
+  cat("~~~~~~~~~~~~~~~~~~~~ Finished, start next mean length ~~~~~~~~~~~~~~~~~~~~")
+  cat("\n")
+  
+  
+}
+
+fcstSkillScores$meanLength = factor(fcstSkillScores$meanLength)
+fcstSkillScores$variable = as.character(fcstSkillScores$variable)
+fcstSkillScores$plotLabel = paste0("Mean Length (N) = ", fcstSkillScores$meanLength, "-years")
+
+# fcstReliability$meanLength = factor(fcstReliability$meanLength)
+fcstReliability$plotLabel = paste0("Mean Length (N) = ", fcstReliability$meanLength, "-years")
+fcstReliabilityTraditional$plotLabel = paste0("Mean Length (N) = ", fcstReliabilityTraditional$meanLength, "-years")
+fcstRankHist$plotLabel = paste0("Mean Length (N) = ", fcstRankHist$meanLength, "-years")
+
+
+```
+
+### save forecasts and skillscores
+```{r}
+
+saveRDS(fcsts, "RF_forecasts_v2.07_blindKFold.Rds")
+# test = readRDS("RF_forecasts_v2.07_blindKFold.Rds")
+
+saveRDS(fcstSkillScores, "RF_forecasts_skillscores_v2.07_blindKFold.Rds")
+
+```
+
+### read forecasts and skillscores
+```{r}
+
+fcsts = readRDS("RF_forecasts_v2.07_blindKFold.Rds")
+# test = readRDS("RF_forecasts_v2.07_blindKFold.Rds")
+
+fcstSkillScores = readRDS("RF_forecasts_skillscores_v2.07_blindKFold.Rds")
+
+```
+
+### plot skill scores
+```{r}
+plot1 = ggplot(data = subset(fcstSkillScores, variable == "RPSS" & model != "CESM-DPLE, KNN"), aes(x = meanLength, y = value, fill = model)) + 
+      geom_boxplot() +  theme_bw() +
+      #coord_cartesian(ylim = c(min(crpss.melt$CRPSS), 1)) +
+      geom_hline(yintercept = 0) + xlab(paste0("Mean Length (years)")) +
+      #ggtitle(paste0("CRPSS for average-, high-, and low- flow years\n", vl, " different 5-year blocks")) +
+      theme(axis.title = element_text(face = "bold"), text=element_text(size=20)) +
+      ylab("RPSS")
+    
+    print(plot1)
+    
+    ggsave("rpss_flowTerciles_AllMeanLengths_blind_RFonly.png", plot = print(plot1), device = "png", width = 10, height = 5, dpi = 450, units = "in")
+    
+ plot2 = ggplot(data = subset(fcstSkillScores, variable == "CRPSS" & model != "CESM-DPLE, KNN"), aes(x = meanLength, y = value, fill = model)) + 
+      geom_boxplot() +  theme_bw() +
+      #coord_cartesian(ylim = c(min(crpss.melt$CRPSS), 1)) +
+      geom_hline(yintercept = 0) + xlab(paste0("Mean Length (years)")) +
+      #ggtitle(paste0("CRPSS for average-, high-, and low- flow years\n", vl, " different 5-year blocks")) +
+      theme(axis.title = element_text(face = "bold"), text=element_text(size=20)) +
+      ylab("CRPSS")
+    
+    print(plot2)
+    
+    ggsave("crpss_flowTerciles_AllMeanLengths_blind_RFonly.png", plot = print(plot2), device = "png", width = 10, height = 5, dpi = 450, units = "in")
+```
+
+    ```{r}
+    
+  #save boxplot quartiles
+    d1 = ggplot_build(plot1)$data
+    print(d1[[1]])
+    
+    #write.csv(d5, paste0(path, fcstType, "-", reservoir, "-", meanLength, "yr_SeptemberOnlyRMSEbyEns_boxplotSummary.xslx"), sep = ",")
+    saveRDS(d1, "rpss_flowTerciles_AllMeanLengths_blind_RFonly_boxplotSummary.rds")
+    
+    dat1 = d1[[1]]
+    
+    y1 = (dat1$middle[1] - dat1$middle[2])/dat1$middle[2]
+    
+```
+
+### plot reliability
+```{r}
+  plot3 = ggplot(data = subset(fcstReliabilityScores, model!= "CESM-DPLE, KNN"), aes(x = factor(meanLength), y = V1, color = model)) + 
+      geom_point() +  theme_bw() +
+      #coord_cartesian(ylim = c(min(crpss.melt$CRPSS), 1)) +
+      geom_hline(yintercept = 0) + xlab(paste0("Mean Length (years)")) +
+      #ggtitle(paste0("CRPSS for average-, high-, and low- flow years\n", vl, " different 5-year blocks")) +
+      theme(axis.title = element_text(face = "bold")) +
+      ylab("Reliability Score") 
+    
+    print(plot3)
+    
+    ggsave("reliabilityScore_AllMeanLengths_blind_RFonly.png", plot = print(plot3), device = "png", dpi = 450, units = "in")
+    ```
+    
+
+
+
+```{r}
+
+fcstRMSEs = NULL
+
+for(i in meanLengths){
+  
+  cat("\n")
+  cat(paste0("Mean length: ", i, "years"))
+  cat("\n")
+  
+  rmse.i = melt.list(fcsts[[i]][[3]])
+  rmse.i$meanLength = i
+  
+  fcstRMSEs = bind_rows(fcstRMSEs, rmse.i)
+
+  cat("\n")
+  cat("~~~~~~~~~~~~~~~~~~~~ Finished, start next mean length ~~~~~~~~~~~~~~~~~~~~")
+  cat("\n")
+  
+  
+}
+
+fcstRMSEs$meanLength = factor(fcstRMSEs$meanLength)
+colnames(fcstRMSEs)[2] = "model"
+```
+
+```{r}
+ plot = ggplot(data = subset(fcstRMSEs, model != "CESM-DPLE, KNN"), aes(x = meanLength, y = value, shape = model)) + 
+      geom_point() +  theme_bw() +
+      #coord_cartesian(ylim = c(min(crpss.melt$CRPSS), 1)) +
+      geom_hline(yintercept = 0) + xlab(paste0("Mean Length (years)")) +
+      #ggtitle(paste0("CRPSS for average-, high-, and low- flow years\n", vl, " different 5-year blocks")) +
+      theme(axis.title = element_text(face = "bold")) +
+      ylab("RMSE (MAF)")
+    
+    print(plot)
+    
+    ggsave("RMSEs_AllMeanLengths_blind_RFonly.png", plot = print(plot), device = "png", width = 10, height = 5, dpi = 450, units = "in")
+    
+```
+
+```{r}
+
+fcstEnsembles = NULL
+clim.Nyrs = matrix(NA, nrow = length(meanLengths), ncol = 2)
+clim.Nyrs[,1] = meanLengths
+
+i = 2
+for(i in meanLengths){
+  
+  cat("\n")
+  cat(paste0("Mean length: ", i, "years"))
+  cat("\n")
+  
+  fcst.i = fcsts[[i]][[1]]$NyrMeanFlowBootstrap
+  fcst.i$meanLength = i
+  
+  fcstEnsembles = bind_rows(fcstEnsembles, fcst.i)
+
+  clim.Nyrs[i-1, 2] = as.numeric(fcsts[[i]][[4]])
+  
+  
+  cat("\n")
+  cat("~~~~~~~~~~~~~~~~~~~~ Finished, start next mean length ~~~~~~~~~~~~~~~~~~~~")
+  cat("\n")
+  
+  
+}
+
+fcstEnsembles$meanLength = factor(fcstEnsembles$meanLength)
+
+colnames(clim.Nyrs) = c("meanLength", "clim.Nyr.i")
+clim.Nyrs = data.frame(clim.Nyrs)
+clim.Nyrs$meanLength = factor(clim.Nyrs$meanLength)
+fcstEnsembles$plotLabel = paste0("Mean Length (N) = ", fcstEnsembles$meanLength, "-years")
+
+```
+
+```{r, fig.width=25, fig.height=15}
+
+  
+  plot = ggplot(subset(fcstEnsembles, covariate != "CESM-DPLE, KNN"), aes(x = startYear, y = q.f_maf, group = interaction(startYear, covariate), fill = covariate)) + 
+    geom_boxplot() + labs(colour = "Covariates & Model") + theme_bw() +
+    geom_point(aes(x = startYear, y = obsFlow), color = "red", stroke = 1, pch = 3) +
+    # geom_crossbar(data = subset(fcstEnsembles, covariate != "CESM-DPLE, KNN"), aes(x = startYear, y = obsFlow, ymin=obsFlow, ymax=obsFlow), position=position_dodge(), color="blue", fatten = 1.5) + 
+    xlab("Year") + ylab("N-year mean flow (MAF)") +
+    theme(axis.title = element_text(face = "bold"), text=element_text(size=25)) +
+    geom_hline(data = clim.Nyrs, aes(yintercept = clim.Nyr.i), col = "black", linetype="dashed") +
+    scale_x_continuous(breaks=seq(1980, 2010, 10)) +  
+    scale_fill_manual(values = "lightblue") +
+    #scale_linetype_manual(name = "Climatology", values = 1, guide = guide_legend(override.aes = list(color = c("black")))) +
+    facet_wrap(~meanLength, scales = "free", shrink = F)
+
+    print(plot)
+    
+    ggsave("fcstEnsembles_AllMeanLengths_blind_RFonly.png", plot = print(plot), device = "png", width = 15, height = 10, dpi = 450, units = "in")
+
+```
+
+```{r, fig.width=25, fig.height=15}
+
+  plot = ggplot(subset(fcstEnsembles, covariate != "CESM-DPLE, KNN" & (meanLength == 3 | meanLength == 5 |meanLength == 7)), aes(x = startYear, y = q.f_maf, group = interaction(startYear, covariate), fill = covariate)) + 
+    geom_boxplot() + labs(fill = "Covariates & Model") + theme_bw() +
+    geom_point(aes(x = startYear, y = obsFlow), color = "red", stroke = 2, pch = 3) +
+    # geom_crossbar(data = subset(fcstEnsembles, covariate != "CESM-DPLE, KNN" & (meanLength == 3 | meanLength == 5 |meanLength == 7)), aes(x = startYear, y = obsFlow, ymin=obsFlow, ymax=obsFlow), position=position_dodge(), color="red", fatten = 2) + 
+    xlab("Year") + ylab("N-year mean flow (MAF)") +
+    theme(axis.title = element_text(face = "bold"), text=element_text(size=25)) +
+    geom_hline(data = clim.Nyrs, aes(yintercept = clim.Nyr.i), col = "black", linetype="dashed", lwd = 0.6) +
+    scale_x_continuous(breaks=seq(1980, 2010, 5)) +  
+    scale_fill_manual(values = "lightblue") +
+    #scale_linetype_manual(name = "Climatology", values = 1, guide = guide_legend(override.aes = list(color = c("black")))) +
+    facet_wrap(~plotLabel, scales = "free", shrink = F, ncol = 1)
+
+    print(plot)
+    
+    ggsave("fcstEnsembles_AllMeanLengths_blind_RFonly_limited.png", plot = print(plot), device = "png", width = 15, height = 10, dpi = 450, units = "in")
+
+```
+
+
+```{r, fig.width=15, fig.height=7.5}
+plot <- ggplot(subset(fcstReliability, Model != "CESM-DPLE, KNN" & (meanLength == 3 | meanLength == 5 |meanLength == 7)), aes(pred, obs_freq, color = Model)) +
+    geom_vline(xintercept = 0, linetype = 'dashed', colour = 'grey20', size = 0.5) +
+    geom_vline(xintercept = 0.2, linetype = 'dashed', colour = 'grey20', size = 0.5) +
+    geom_vline(xintercept = 0.4, linetype = 'dashed', colour = 'grey20', size = 0.5) +
+    geom_vline(xintercept = 0.6, linetype = 'dashed', colour = 'grey20', size = 0.5) +
+    geom_vline(xintercept = 0.8, linetype = 'dashed', colour = 'grey20', size = 0.5) +
+    geom_vline(xintercept = 1, linetype = 'dashed', colour = 'grey20', size = 0.5) +
+    geom_point() +
+    theme_bw() +
+    xlab('Forecast Probability') +
+    ylab('Observed Frequency') +
+    scale_x_continuous(expand = c(0.0,0.0), breaks = seq(0,1,0.2), minor_breaks = seq(0,1,0.1), limits = c(-0.02,1.02))+
+    scale_y_continuous(expand = c(0.0,0.0), breaks = seq(0,1,0.2), limits = c(-0.02,1.02)) +
+    theme(panel.grid.minor = element_line(size = 0.02), 
+          panel.grid.major = element_line(color = 'grey65', size = 0.5),
+          axis.title = element_text(face = "bold")) +
+    coord_fixed() + 
+    theme(axis.title = element_text(face = "bold"), text=element_text(size=25)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    labs(color = "Model") +
+    facet_wrap(~plotLabel, shrink = F, nrow = 1) +
+    theme(panel.spacing.x = unit(0.4, "in"))
+  # gg_circle(r=0.02, xc=fcst_prob, yc=obs_freq, color = 'red')
+  
+  print(plot)
+  
+  ggsave("fcstReliabilityDiagrams_limited_blind_RFonly.png", plot = print(plot), device = "png", width = 15, height = 7.5, dpi = 450, units = "in")
+  
+  
+```
+
+
+```{r, fig.width=15, fig.height=5}
+
+meanPlots = c(3,5,7)
+n = length(meanPlots)
+
+subPlots = vector("list", n)
+relPlots = vector("list", n)
+labels = vector("list", n)
+
+xlabs = c("", 'Forecast Probability', "")
+ylabs = c('Observed Frequency', "", "")
+
+for(i in 1:n){
+  cat("\n")
+  cat(i)
+  cat("\n")
+  
+  j = meanPlots[i]
+  cat(j)
+  cat("\n")
+  
+  ## small histogram for plots (subplot)
+  subPlots[[i]] = ggplot(subset(fcstRankHist, label != "CESM-DPLE, KNN" & meanLength == j), aes(x = x,  fill = label)) + 
+  geom_histogram(col = 'black', binwidth = 0.1, position = 'dodge') +
+  theme_classic() +
+  theme(legend.position="none", 
+        axis.title.x=element_blank(), axis.text.x=element_blank(), 
+        axis.title.y=element_blank(), axis.text.y=element_blank()) +
+  scale_x_continuous(breaks = seq(0,10,2), expand = c(0.0,0.0)) +
+  scale_y_continuous(expand = c(0.0,0.0)) + 
+  theme(panel.grid = element_blank(), panel.border = element_blank()) 
+  
+  ## reliability plots containing subplots
+  relPlots[[i]] = ggplot(subset(fcstReliabilityTraditional, label != "CESM-DPLE, KNN" & meanLength == j), aes(x = threshold, y = obar, color = label)) +
+    geom_abline(slope = 1, intercept = 0, col = 'black', linetype = "dashed")+
+    geom_line(size = 1.1) +
+    geom_point(size = 3) +
+    scale_y_continuous(breaks=seq(0, 1, 0.2), limits = c(0,1), expand = c(0,0)) +
+    scale_x_continuous(breaks=seq(0, 1, 0.2), limits = c(0,1), expand = c(0,0)) +
+    theme_bw() +
+    theme(legend.position="none", panel.background = element_blank()) +
+    annotation_custom(ggplotGrob(subPlots[[i]]), xmin = 0.01, xmax = 0.35, ymin = 0.63, ymax = 0.99) +
+    xlab(xlabs[i]) +
+    ylab(ylabs[i]) +
+    labs(color = "Model") +
+    theme(axis.title = element_text(face = "bold"), text=element_text(size=18))+
+    coord_fixed() + #+ theme(panel.spacing.x = unit(0.8, "in"))
+    theme(plot.margin = unit(c(0.1,0.4,0.1,0.1), "cm"))
+
+
+  
+  labels[[i]] = paste0("Mean Length (N) = ", j, "-years")
+
+  
+}
+
+
+    p = ggarrange(relPlots[[1]], relPlots[[2]], relPlots[[3]], ncol = 3, nrow = 1, common.legend = T, legend = "right", labels = labels, align = "hv", vjust = 2.5)
+  
+    p
+    # p2 = annotate_figure(p, top = text_grob(paste0("Mean Length (N) = ", meanPlots[1], "-years"), face = "bold", size = 14, vjust = 0.5), 
+                       # fig.lab.pos = "top.left")
+  
+  ggsave("fcstReliabilityDiagramsTraditional_limited_blind_RFonly.png", plot = print(p), device = "png", width = 18, height = 6, dpi = 450, units = "in")
+```
+
+
+
+```{r, fig.width=25, fig.height=15}
+ p1b = ggplot(data = subset(fcstSkillScores, variable == "RPSS" & model != "CESM-DPLE, KNN")) + 
+      geom_line(mapping = aes(x = startYear, y = value, linetype = model)) +
+      geom_point(mapping = aes(x = startYear, y = value, color = flowTercile)) +
+      theme_bw() +
+      #geom_boxplot(aes(fill = covariate)) + 
+      geom_hline(yintercept = 0) + xlab(paste0("Starting year of projected N-year mean flow")) +
+      theme(axis.title = element_text(face = "bold"), axis.text.x = element_text(), text=element_text(size=25)) +
+      ylab("RPSS") +
+      guides(color=guide_legend("Flow Tercile")) +
+    #scale_x_discrete(breaks=seq(min(as.numeric(as.character(crpss.melt$startYear))), max(as.numeric(as.character(crpss.melt$startYear))), 10))
+      facet_wrap(~meanLength, scales = "free", shrink = F)
+
+    print(p1b)
+    
+    ggsave("rpss_skillTS_AllMeanLengths_blind_RFonly.png", plot = print(p1b), device = "png", width = 15, height = 10, dpi = 450, units = "in")
+    
+```
+
+```{r, fig.width=25, fig.height=15}
+ p1c = ggplot(data = subset(fcstSkillScores, variable == "RPSS" & model != "CESM-DPLE, KNN" & (meanLength == 3 | meanLength == 5 |meanLength == 7))) + 
+      geom_line(mapping = aes(x = startYear, y = value, linetype = model), size = 1.1) +
+      geom_point(mapping = aes(x = startYear, y = value, color = flowTercile), size = 3.5) +
+      theme_bw() +
+      #geom_boxplot(aes(fill = covariate)) + 
+      geom_hline(yintercept = 0) + xlab(paste0("Starting year of projected N-year mean flow")) +
+      theme(axis.title = element_text(face = "bold"), axis.text.x = element_text(), text=element_text(size=25)) +
+      ylab("RPSS") +
+      scale_x_continuous(breaks=seq(1980, 2015, 5)) +  
+      guides(color=guide_legend("Flow Tercile")) +
+    #scale_x_discrete(breaks=seq(min(as.numeric(as.character(crpss.melt$startYear))), max(as.numeric(as.character(crpss.melt$startYear))), 10))
+      facet_wrap(~meanLength, scales = "free", shrink = F, ncol = 1)
+
+    print(p1c)
+    
+    ggsave("rpss_skillTS_AllMeanLengths_blind_RFonly_limited.png", plot = print(p1c), device = "png", width = 15, height = 10, dpi = 450, units = "in")
+    
+```
+
+#########################################################################################################################
+#########################################################################################################################
+# Archived code
+#########################################################################################################################
+#########################################################################################################################
+

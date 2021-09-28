@@ -1,0 +1,403 @@
+
+
+```{r}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#   plot MTOM simulations #
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+# 8 april 2020 
+
+#### Author: David Woodson
+
+#### CLEAR MEMORY
+rm(list=ls())
+
+#### Clear the R console
+cat("\f")
+
+#### SOURCE LIBRARIES (suppress package loading messages) AND SET WORKING DIRECTORY
+mainDir="K:/My Drive/Phd Research/CRB Midterm Temperature Perturbed Predictions/Code/Phase 1/mtom"
+
+setwd(mainDir)
+suppressPackageStartupMessages(source("mtom_postProcessing_library - v1.4.R"))
+source("mtom_postProcessing_library - v1.4.R")
+
+```
+
+### Run k Fold -----------------------------------------------------------------------
+
+#### 3-year means
+```{r}
+years = c(1981:2012)
+reservoir = "Powell"
+fcstType = "kFold"
+meanLength = 3
+subdir = "RF300_kFold/3yr/RF300_3yr_DMI,RF300_3yr MRM,MTOM Model,Rules,RF_300trace_fcst-"
+nseOn = T
+
+powell_kF_3yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+
+```
+
+```{r}
+reservoir = "Mead"
+mead_kF_3yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+
+```
+
+#### 5-year means
+```{r}
+years = c(1981:2012)
+reservoir = "Powell"
+fcstType = "kFold"
+meanLength = 5
+subdir = "RF300_kFold/5yr/RF300_5yr_DMI,RF300_5yr MRM,MTOM Model,Rules,RF_300trace_fcst-"
+nseOn = T
+
+powell_kF_5yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+
+```
+
+```{r}
+reservoir = "Mead"
+mead_kF_5yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+
+```
+
+#### 8-year means
+```{r}
+# years = c(1981:2009)
+# reservoir = "Powell"
+# fcstType = "BlindLOOCV_DPLE"
+# meanLength = 8
+# subdir = "RF300_blindLOOCV/RF300_8yr/RF300_8yr_DMI,RF300_8yr MRM,MTOM Model,Rules,RF_300trace_fcst-"
+# nseOn = F
+# 
+# powell_BL_8yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+
+```
+
+```{r}
+# reservoir = "Mead"
+# mead_BL_8yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+```
+
+#### 7-year means
+```{r}
+years = c(1981:2010)
+reservoir = "Powell"
+fcstType = "kFold"
+meanLength = 7
+subdir = "RF300_kFold/7yr/RF300_7yr_DMI,RF300_7yr MRM,MTOM Model,Rules,RF_300trace_fcst-"
+nseOn = T
+
+powell_kF_7yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+
+```
+
+```{r}
+reservoir = "Mead"
+mead_kF_7yr = reservoir.analysis(years, reservoir, fcstType, meanLength, subdir, nseOn)
+```
+
+
+### Export data and analysis
+```{r}
+
+powell_kF_combined = list(powell_kF_3yr, powell_kF_5yr, powell_kF_7yr)
+names(powell_kF_combined) = c(3,5,7)
+
+mead_kF_combined = list(mead_kF_3yr, mead_kF_5yr, mead_kF_7yr)
+names(mead_kF_combined) = c(3,5,7)
+
+setwd("K:/My Drive/Phd Research/CRB Midterm Temperature Perturbed Predictions/Data/Phase 1/mtom")
+saveRDS(powell_kF_combined, 'mtomAnalysis.powell_kFold_RF300_combined_v1.9.Rds')
+saveRDS(mead_kF_combined, 'mtomAnalysis.mead_kFold_RF300_combined_v1.9.Rds')
+
+#test = readRDS('mtomAnalysis.powell.Rds')
+
+```
+
+```{r}
+setwd("K:/My Drive/Phd Research/CRB Midterm Temperature Perturbed Predictions/Data/Phase 1/mtom")
+powell_kF_combined = readRDS('mtomAnalysis.powell_kFold_RF300_combined_v1.9.Rds')
+mead_kF_combined = readRDS('mtomAnalysis.mead_kFold_RF300_combined_v1.9.Rds')
+```
+
+
+#EOWY ensemble RMSE
+```{r}
+meanLengths = c(3,5,7)
+combEnsRMSE = NULL
+
+for(i in 1:3){
+
+  tmp.i.p = powell_kF_combined[[i]]$rmse.eoy.byEns.df
+  tmp.i.p$`Mean Length` = meanLengths[i]
+  tmp.i.p$Reservoir = 'Powell'
+  
+  tmp.i.m = mead_kF_combined[[i]]$rmse.eoy.byEns.df
+  tmp.i.m$`Mean Length` = meanLengths[i]
+  tmp.i.m$Reservoir = 'Mead'
+
+  combEnsRMSE = rbind(combEnsRMSE, tmp.i.p, tmp.i.m)
+}
+
+combEnsRMSE$LeadTime = as.factor(as.numeric(combEnsRMSE$Year)*12)
+combEnsRMSE$Tag = paste0(combEnsRMSE$Reservoir,' - ', combEnsRMSE$Method)
+combEnsRMSE$`Mean Length` = as.factor(combEnsRMSE$`Mean Length`)
+combEnsRMSE$plotTag = paste0("Mean Length (N) = ", combEnsRMSE$`Mean Length`, "-years")
+```
+
+
+```{r, fig.width = 12, fig.height=4}
+    #by ens rmse
+    path = paste0("K:/My Drive/Phd Research/CRB Midterm Temperature Perturbed Predictions/Code/Phase 1/mtom/plots/MTOM_RF300/")
+    text_size = 18
+
+    p1 = ggplot(data = combEnsRMSE, aes(x = LeadTime, y = RMSE)) + 
+      geom_boxplot(aes(fill = Tag)) + theme_bw() + 
+      coord_cartesian(ylim = c(0, 110)) +
+      geom_hline(yintercept = 0) +
+       ylab('RMSE (ft)') + xlab("Lead Time (number of months)") +
+      theme(plot.title = element_text(size = 10, face = "bold"), axis.title = element_text(face = "bold"), 
+      text=element_text(size=text_size)) +
+      #scale_x_discrete(labels = seq(12, (meanLength.N*12), 12)) +
+      facet_wrap(~plotTag, scales = "free", shrink = F) +
+      # ggtitle("Mean Length (years)") + 
+      theme(plot.title = element_text(hjust=0.5))
+
+    
+    print(p1)
+    
+    ggsave("ensembleRMSE_eowy_kFold_RF300_3,5,7yrs_MeadPowell.png", p1, "png", path = path, dpi = 400)
+    
+```
+    
+```{r}
+    d1 = ggplot_build(p1)$data
+    print(d1[[1]])
+    
+```
+
+
+#EOWY CRPSS
+```{r}
+combCRPSS = NULL
+
+for(i in 1:3){
+
+  tmp.i.p = powell_kF_combined[[i]]$crpss.eoy.df
+  tmp.i.p$`Mean Length` = meanLengths[i]
+  tmp.i.p$Reservoir = 'Powell'
+  
+  tmp.i.m = mead_kF_combined[[i]]$crpss.eoy.df
+  tmp.i.m$`Mean Length` = meanLengths[i]
+  tmp.i.m$Reservoir = 'Mead'
+
+  combCRPSS = rbind(combCRPSS, tmp.i.p, tmp.i.m)
+}
+
+combCRPSS$LeadTime = as.factor(as.numeric(combCRPSS$Year)*12)
+combCRPSS$Tag = paste0(combCRPSS$Reservoir,' - ', combCRPSS$Method)
+combCRPSS$`Mean Length` = as.factor(combCRPSS$`Mean Length`)
+```
+
+
+```{r, fig.width = 12, fig.height=4}
+    
+  p2 = ggplot(data = combCRPSS, aes(x = LeadTime, y = CRPSS)) + 
+      geom_boxplot(aes(fill = Tag)) + theme_bw() + 
+      coord_cartesian(ylim = c(-2,1)) +
+      geom_hline(yintercept = 0) +
+      ylab('CRPSS') + xlab("Lead Time (number of months)") +
+      theme(plot.title = element_text(size = 10, face = "bold"), axis.title = element_text(face = "bold")) +
+      #scale_x_discrete(labels = seq(12, (meanLength.N*12), 12)) +
+      facet_wrap(~`Mean Length`, scales = "free", shrink = F) +
+      ggtitle("Mean Length (years)") + theme(plot.title = element_text(hjust=0.5))
+
+    
+    print(p2)
+    
+    ggsave("eowyCRPSS_kFold_RF300_3,5,7yrs_MeadPowell.png", p2, "png", path = path, dpi = 400)
+    
+```
+
+```{r}
+    d2 = ggplot_build(p2)$data
+    print(d2[[1]])
+    
+```
+
+#annual NSE
+```{r}
+combNSE = NULL
+
+for(i in 1:3){
+
+  tmp.i.p = powell_kF_combined[[i]]$nse.ann.df
+  tmp.i.p$`Mean Length` = meanLengths[i]
+  tmp.i.p$Reservoir = 'Powell'
+  
+  tmp.i.m = mead_kF_combined[[i]]$nse.ann.df
+  tmp.i.m$`Mean Length` = meanLengths[i]
+  tmp.i.m$Reservoir = 'Mead'
+
+  combNSE = rbind(combNSE, tmp.i.p, tmp.i.m)
+}
+
+combNSE$LeadTime = as.factor(as.numeric(combNSE$Year)*12)
+combNSE$Tag = paste0(combNSE$Reservoir,' - ', combNSE$Method)
+combNSE$`Mean Length` = as.factor(combNSE$`Mean Length`)
+```
+
+
+```{r, fig.width = 12, fig.height=4}
+    
+  p3 = ggplot(data = combNSE, aes(x = Year, y = NSE)) + 
+      geom_boxplot(aes(fill = Tag)) + theme_bw() + 
+      coord_cartesian(ylim = c(-2,1)) +
+      geom_hline(yintercept = 0) +
+      ylab('NSE') + xlab("Year") +
+      theme(plot.title = element_text(size = 10, face = "bold"), axis.title = element_text(face = "bold")) +
+      #scale_x_discrete(labels = seq(12, (meanLength.N*12), 12)) +
+      facet_wrap(~`Mean Length`, scales = "free", shrink = F) +
+      ggtitle("Mean Length (years)") + theme(plot.title = element_text(hjust=0.5))
+
+    
+    print(p3)
+    
+    ggsave("annualNSE_ensMean_kFold_RF300_3,5,7yrs_MeadPowell.png", p3, "png", path = path, dpi = 400)
+    
+```
+
+
+```{r}
+    d3 = ggplot_build(p3)$data
+    print(d3[[1]])
+    
+```
+
+### Calc Median improvement in RMSE - years 1-5 separately for each year
+```{r}
+# #Powell
+# med.rmse = matrix(NA, nrow = 5, ncol = 3)
+# 
+# i = 1
+# for(i in 1:5){
+#   
+#   powell.rmse.esp = subset(powell$rmse.ann.df, Method == "ESP" & Year == i)
+#   powell.rmse.fcst = subset(powell$rmse.ann.df, Method == "RF" & Year == i)
+#   
+#   med.rmse.esp = median(powell.rmse.esp$RMSE)
+#   med.rmse.fcst = median(powell.rmse.fcst$RMSE)
+# 
+#   percentChange = (med.rmse.fcst - med.rmse.esp)/med.rmse.esp*100
+#     
+#   med.rmse[i,] = c(med.rmse.esp, med.rmse.fcst, percentChange)
+#   colnames(med.rmse) = c("med.rmse.esp", "med.rmse.fcst", "percentChange")
+# }
+
+```
+
+
+
+
+### Calc Median improvement in RMSE - years 2-4
+```{r}
+# #Powell
+# powell.rmse.esp.24 = subset(powell$rmse.24.df, Method == "ESP")
+# powell.rmse.fcst.24 = subset(powell$rmse.24.df, Method == "RF")
+# 
+# med.powell.rmse.esp.24 = median(powell.rmse.esp.24$RMSE)
+# med.powell.rmse.fcst.24 = median(powell.rmse.fcst.24$RMSE)
+# med.powell.rmse.wEsp.24 = median(powell.rmse.wEsp.24$RMSE)
+# 
+# #change and percent change in median RMSE
+# #fcstbb
+# med.c.powell.fcst = (med.powell.rmse.fcst.24 - med.powell.rmse.esp.24)
+# med.pc.powell.fcst = (med.powell.rmse.fcst.24 - med.powell.rmse.esp.24)/med.powell.rmse.esp.24*100
+# med.c.powell.fcst
+# med.pc.powell.fcst
+# 
+# #wEsp
+# med.c.powell.wEsp = (med.powell.rmse.wEsp.24 - med.powell.rmse.esp.24)
+# med.pc.powell.wEsp = (med.powell.rmse.wEsp.24 - med.powell.rmse.esp.24)/med.powell.rmse.esp.24*100
+# med.c.powell.wEsp
+# med.pc.powell.wEsp
+
+```
+
+```{r}
+# #Mead
+# mead.rmse.esp.24 = subset(mead$rmse.24.df, Method == "ESP")
+# mead.rmse.fcst.24 = subset(mead$rmse.24.df, Method == "RF")
+# 
+# med.mead.rmse.esp.24 = median(mead.rmse.esp.24$RMSE)
+# med.mead.rmse.fcst.24 = median(mead.rmse.fcst.24$RMSE)
+# med.mead.rmse.wEsp.24 = median(mead.rmse.wEsp.24$RMSE)
+# 
+# #change and percent change in median RMSE
+# #fcstbb
+# med.c.mead.fcst = (med.mead.rmse.fcst.24 - med.mead.rmse.esp.24)
+# med.pc.mead.fcst = (med.mead.rmse.fcst.24 - med.mead.rmse.esp.24)/med.mead.rmse.esp.24*100
+# med.c.mead.fcst
+# med.pc.mead.fcst
+# 
+# #wEsp
+# med.c.mead.wEsp = (med.mead.rmse.wEsp.24 - med.mead.rmse.esp.24)
+# med.pc.mead.wEsp = (med.mead.rmse.wEsp.24 - med.mead.rmse.esp.24)/med.mead.rmse.esp.24*100
+# med.c.mead.wEsp
+# med.pc.mead.wEsp
+
+```
+
+### Calc Median improvement in RMSE - years 1-5 ens mean
+```{r}
+# #Powell
+# powell.rmse.esp.ensMean = subset(powell$rmse.ensMean.df, Method == "ESP")
+# powell.rmse.fcst.ensMean = subset(powell$rmse.ensMean.df, Method == "RF")
+# 
+# med.powell.rmse.esp.ensMean = median(powell.rmse.esp.ensMean$RMSE)
+# med.powell.rmse.fcst.ensMean = median(powell.rmse.fcst.ensMean$RMSE)
+# med.powell.rmse.wEsp.ensMean = median(powell.rmse.wEsp.ensMean$RMSE)
+# 
+# #change and percent change in median RMSE
+# #fcstbb
+# med.c.powell.fcst = (med.powell.rmse.fcst.ensMean - med.powell.rmse.esp.ensMean)
+# med.pc.powell.fcst = (med.powell.rmse.fcst.ensMean - med.powell.rmse.esp.ensMean)/med.powell.rmse.esp.ensMean*100
+# med.c.powell.fcst
+# med.pc.powell.fcst
+# 
+# #wEsp
+# med.c.powell.wEsp = (med.powell.rmse.wEsp.ensMean - med.powell.rmse.esp.ensMean)
+# med.pc.powell.wEsp = (med.powell.rmse.wEsp.ensMean - med.powell.rmse.esp.ensMean)/med.powell.rmse.esp.ensMean*100
+# med.c.powell.wEsp
+# med.pc.powell.wEsp
+
+```
+
+```{r}
+# #Mead
+# mead.rmse.esp.ensMean = subset(mead$rmse.ensMean.df, Method == "ESP")
+# mead.rmse.fcst.ensMean = subset(mead$rmse.ensMean.df, Method == "RF")
+# 
+# med.mead.rmse.esp.ensMean = median(mead.rmse.esp.ensMean$RMSE)
+# med.mead.rmse.fcst.ensMean = median(mead.rmse.fcst.ensMean$RMSE)
+# med.mead.rmse.wEsp.ensMean = median(mead.rmse.wEsp.ensMean$RMSE)
+# 
+# #change and percent change in median RMSE
+# #fcstbb
+# med.c.mead.fcst = (med.mead.rmse.fcst.ensMean - med.mead.rmse.esp.ensMean)
+# med.pc.mead.fcst = (med.mead.rmse.fcst.ensMean - med.mead.rmse.esp.ensMean)/med.mead.rmse.esp.ensMean*100
+# med.c.mead.fcst
+# med.pc.mead.fcst
+# 
+# #wEsp
+# med.c.mead.wEsp = (med.mead.rmse.wEsp.ensMean - med.mead.rmse.esp.ensMean)
+# med.pc.mead.wEsp = (med.mead.rmse.wEsp.ensMean - med.mead.rmse.esp.ensMean)/med.mead.rmse.esp.ensMean*100
+# med.c.mead.wEsp
+# med.pc.mead.wEsp
+
+```
+
